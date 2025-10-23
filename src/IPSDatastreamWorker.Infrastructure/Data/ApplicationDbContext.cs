@@ -30,6 +30,10 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             
+            // Configure JSONB column for PostgreSQL
+            entity.Property(e => e.QualityMetricsRawJson)
+                .HasColumnType("jsonb");
+            
             // Indexes for performance
             entity.HasIndex(e => e.SessionId);
             entity.HasIndex(e => e.UserId);
