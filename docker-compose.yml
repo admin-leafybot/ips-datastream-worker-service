@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ips-datastream-worker
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ConnectionStrings__Default: "Host=db;Port=5432;Database=ips_data_acquisition;Username=postgres;Password=postgres"
+      Redis__Endpoint: redis:6379
+      Redis__UseSsl: false
+      Redis__Database: 0
+      Redis__KeyPrefix: "imu:session:"
+      Redis__ExpirationHours: 24
+      QualityCheck__PollingIntervalSeconds: 30
+      QualityCheck__CompletedThresholdMinutes: 5
+      QualityCheck__BatchSize: 10
+      QualityCheck__MaxConcurrency: 5
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: ips-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ips_data_acquisition
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: ips-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  postgres_data:
+  redis_data:
+
