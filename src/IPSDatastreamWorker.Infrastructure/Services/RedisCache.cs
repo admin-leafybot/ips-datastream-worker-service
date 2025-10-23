@@ -48,26 +48,47 @@ public class RedisCache : IRedisCache, IDisposable
             
             _logger.LogDebug("Fetching session data from Redis with key: {Key}", key);
             
-            var value = await _db.StringGetAsync(key);
+            // Get all items from the Redis list (acquisition worker stores as list, not string)
+            var values = await _db.ListRangeAsync(key);
             
-            if (value.IsNullOrEmpty)
+            if (values.Length == 0)
             {
                 _logger.LogWarning("No data found in Redis for session {SessionId}", sessionId);
                 return new List<IMUDataDto>();
             }
 
-            var data = JsonSerializer.Deserialize<List<IMUDataDto>>(value.ToString());
+            var dataPoints = new List<IMUDataDto>();
             
-            if (data == null)
+            foreach (var value in values)
             {
-                _logger.LogWarning("Failed to deserialize Redis data for session {SessionId}", sessionId);
+                if (value.HasValue)
+                {
+                    try
+                    {
+                        var dataPoint = JsonSerializer.Deserialize<IMUDataDto>(value.ToString());
+                        if (dataPoint != null)
+                        {
+                            dataPoints.Add(dataPoint);
+                        }
+                    }
+                    catch (JsonException jsonEx)
+                    {
+                        _logger.LogWarning(jsonEx, "Failed to deserialize a data point for session {SessionId}", sessionId);
+                        // Continue with other data points
+                    }
+                }
+            }
+            
+            if (!dataPoints.Any())
+            {
+                _logger.LogWarning("No valid data points after deserialization for session {SessionId}", sessionId);
                 return new List<IMUDataDto>();
             }
 
             _logger.LogInformation("Successfully retrieved {Count} data points from Redis for session {SessionId}", 
-                data.Count, sessionId);
+                dataPoints.Count, sessionId);
             
-            return data;
+            return dataPoints;
         }
         catch (Exception ex)
         {
@@ -81,7 +102,9 @@ public class RedisCache : IRedisCache, IDisposable
         try
         {
             var key = $"{_keyPrefix}{sessionId}";
-            return await _db.KeyExistsAsync(key);
+            // Check if list exists and has items
+            var length = await _db.ListLengthAsync(key);
+            return length > 0;
         }
         catch (Exception ex)
         {
