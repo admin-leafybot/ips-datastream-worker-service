@@ -58,6 +58,7 @@ public class RedisCache : IRedisCache, IDisposable
             }
 
             var dataPoints = new List<IMUDataDto>();
+            int deserializationFailures = 0;
             
             foreach (var value in values)
             {
@@ -73,10 +74,18 @@ public class RedisCache : IRedisCache, IDisposable
                     }
                     catch (JsonException jsonEx)
                     {
-                        _logger.LogWarning(jsonEx, "Failed to deserialize a data point for session {SessionId}", sessionId);
+                        deserializationFailures++;
+                        _logger.LogWarning(jsonEx, "Failed to deserialize data point #{FailureCount} for session {SessionId}. Raw value: {RawValue}", 
+                            deserializationFailures, sessionId, value.ToString().Substring(0, Math.Min(100, value.ToString().Length)));
                         // Continue with other data points
                     }
                 }
+            }
+            
+            if (deserializationFailures > 0)
+            {
+                _logger.LogWarning("Total deserialization failures for session {SessionId}: {FailureCount} out of {TotalCount} records", 
+                    sessionId, deserializationFailures, values.Length);
             }
             
             if (!dataPoints.Any())
@@ -85,8 +94,8 @@ public class RedisCache : IRedisCache, IDisposable
                 return new List<IMUDataDto>();
             }
 
-            _logger.LogInformation("Successfully retrieved {Count} data points from Redis for session {SessionId}", 
-                dataPoints.Count, sessionId);
+            _logger.LogInformation("Successfully retrieved {ProcessedCount} data points from Redis for session {SessionId} (Raw count: {RawCount}, Failures: {FailureCount})", 
+                dataPoints.Count, sessionId, values.Length, deserializationFailures);
             
             return dataPoints;
         }
